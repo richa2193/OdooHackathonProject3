@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gov-primary: #005a9c;
+  --gov-secondary: #e8f4f8;
+  --bg-color: #ffffff;
+  --text-color: #333333;
+}
+
+[data-theme='dark'] {
+  --bg-color: #1a202c;
+  --text-color: #e2e8f0;
+  --gov-primary: #3182ce;
+  --gov-secondary: #2d3748;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.nav-link {
+  @apply text-white hover:text-gov-accent transition-colors duration-200 px-3 py-2 rounded-md text-sm font-medium;
+}
+
+.btn-primary {
+  @apply bg-gov-primary text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition duration-300;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white font-bold py-2 px-4 rounded hover:bg-red-700 transition duration-300;
+}
+
+.card {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border border-gray-200 dark:border-gray-700;
+}

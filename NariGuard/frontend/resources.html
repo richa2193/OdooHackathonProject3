@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NariGuard Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: 'class' }
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <style>
+        :root {
+            --primary-start: #9333ea; /* purple-600 */
+            --primary-end: #ec4899;   /* pink-500 */
+            --primary-text: #9333ea;
+            --primary-bg: #f3e8ff;    /* purple-100 */
+            --primary-border: #e9d5ff; /* purple-200 */
+        }
+        .theme-blue {
+            --primary-start: #2563eb;
+            --primary-end: #06b6d4;
+            --primary-text: #2563eb;
+            --primary-bg: #dbeafe;
+            --primary-border: #bfdbfe;
+        }
+        .theme-green {
+            --primary-start: #16a34a;
+            --primary-end: #84cc16;
+            --primary-text: #16a34a;
+            --primary-bg: #dcfce7;
+            --primary-border: #bbf7d0;
+        }
+        
+        .grad-bg-text { background-image: linear-gradient(to right, var(--primary-start), var(--primary-end)); }
+        .grad-btn { background-image: linear-gradient(to right, var(--primary-start), var(--primary-end)); }
+        .text-primary { color: var(--primary-text); }
+        .bg-primary-light { background-color: var(--primary-bg); }
+        .border-primary-light { border-color: var(--primary-border); }
+        .hover-text-primary:hover { color: var(--primary-text); }
+        .hover-bg-primary-light:hover { background-color: var(--primary-bg); }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: background-color 0.3s, color 0.3s; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); }
+        .dark .glass { background: rgba(31, 41, 55, 0.7); border: 1px solid rgba(255,255,255,0.05); }
+        .sos-btn { background: linear-gradient(135deg, #ff416c, #ff4b2b); box-shadow: 0 10px 30px rgba(255, 65, 108, 0.4); }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 dark:text-gray-200 bg-gradient-to-br from-gray-50 to-gray-200 dark:from-gray-900 dark:to-gray-900 theme-purple">
+
+    
+    <nav class="glass sticky top-0 z-50 shadow-sm transition-colors duration-300 dark:bg-gray-900/80 dark:border-b dark:border-gray-800">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+            <div class="text-2xl font-black bg-clip-text text-transparent grad-bg-text">NariGuard</div>
+            <div class="flex flex-wrap gap-4 items-center">
+                <a href="index.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Home</a>
+                <a href="safe-routes.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Routes</a>
+                <a href="career.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">AI Career</a>
+                <a href="mentors.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Mentors</a>
+                <a href="resources.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Resources</a>
+                <a href="jobs.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Jobs</a>
+                
+                <!-- Color Cycle Button -->
+                <button id="color-cycle-btn" class="p-2 rounded-full bg-primary-light text-primary hover:scale-110 transition shadow-sm" title="Change Color Theme">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+                </button>
+
+                <!-- Dark/Light Toggle Button -->
+                <button id="theme-toggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white transition">
+                    <svg id="theme-icon-light" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="theme-icon-dark" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </button>
+                <a href="admin.html" class="px-4 py-2 rounded-full border border-primary-light text-primary hover-bg-primary-light font-semibold transition">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 py-12">
+        <h2 class="text-3xl font-black mb-8 dark:text-white text-center">Legal & Health Resource Center</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="glass p-8 rounded-3xl border-t-8 border-purple-500">
+                <h3 class="font-black text-2xl dark:text-white mb-4">The POSH Act (2013)</h3>
+                <p class="text-gray-600 dark:text-gray-300 mb-4">Protection of Women from Sexual Harassment at Workplace. Mandates employers to form Internal Complaints Committees (ICC).</p>
+                <a href="./posh_act.pdf" download="POSH_Act_2013_Guide.pdf" class="text-purple-600 font-bold hover:underline cursor-pointer">Read Full Legal Guide &rarr;</a>
+            </div>
+            <div class="glass p-8 rounded-3xl border-t-8 border-pink-500">
+                <h3 class="font-black text-2xl dark:text-white mb-4">Zero FIR Rights</h3>
+                <p class="text-gray-600 dark:text-gray-300 mb-4">A Zero FIR can be filed in any police station, irrespective of jurisdiction. Crucial for immediate action in crimes against women.</p>
+                <a href="./zero_fir.pdf" download="Zero_FIR_Fact_Sheet.pdf" class="text-pink-600 font-bold hover:underline cursor-pointer">Download Fact Sheet &rarr;</a>
+            </div>
+            <div class="glass p-8 rounded-3xl border-t-8 border-blue-500">
+                <h3 class="font-black text-2xl dark:text-white mb-4">Maternity Benefit Act</h3>
+                <p class="text-gray-600 dark:text-gray-300 mb-4">Guarantees 26 weeks of paid maternity leave for women working in establishments with 10 or more employees.</p>
+                <a href="./maternity_act.pdf" download="Maternity_Benefit_Act.pdf" class="text-blue-600 font-bold hover:underline cursor-pointer">Learn Your Rights &rarr;</a>
+            </div>
+            <div class="glass p-8 rounded-3xl border-t-8 border-green-500">
+                <h3 class="font-black text-2xl dark:text-white mb-4">Mental Wellness Guide</h3>
+                <p class="text-gray-600 dark:text-gray-300 mb-4">Free resources, coping mechanisms, and subsidized therapy options for trauma survivors and working professionals.</p>
+                <a href="./wellness_guide.pdf" download="Comprehensive_Wellness_Guide.pdf" class="text-green-600 font-bold hover:underline cursor-pointer">Access Wellness Portal &rarr;</a>
+            </div>
+        </div>
+
+        <div class="mt-16 bg-white/5 border border-white/10 p-8 rounded-3xl backdrop-blur-md">
+            <h2 class="text-3xl font-black text-white mb-4">Rate Government Services</h2>
+            <p class="text-gray-400 mb-6">Help us hold public emergency services accountable. Submit your anonymous feedback directly to the Admin Dashboard.</p>
+            <div class="flex flex-col md:flex-row gap-4">
+                <select id="gov-service-select" class="bg-gray-800 text-white rounded-xl px-4 py-3 border border-gray-700 outline-none focus:border-blue-500 transition">
+                    <option>Police Response (100)</option>
+                    <option>Women Helpline (1091)</option>
+                    <option>Ambulance Service (108)</option>
+                    <option>Cyber Crime Cell</option>
+                </select>
+                <select id="gov-rating-select" class="bg-gray-800 text-yellow-400 font-bold rounded-xl px-4 py-3 border border-gray-700 outline-none focus:border-blue-500 transition">
+                    <option value="5">★★★★★ Excellent</option>
+                    <option value="4">★★★★☆ Good</option>
+                    <option value="3">★★★☆☆ Average</option>
+                    <option value="2">★★☆☆☆ Poor</option>
+                    <option value="1">★☆☆☆☆ Terrible</option>
+                </select>
+                <input type="text" id="gov-feedback" placeholder="Write optional feedback or complaints..." class="flex-1 bg-gray-800 text-white rounded-xl px-4 py-3 border border-gray-700 outline-none focus:border-blue-500 transition">
+                <button onclick="submitGovRating()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl transition shadow-lg shadow-blue-500/30">Submit Rating</button>
+            </div>
+        </div>
+    </main>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+    <script src="./main.js"></script>
+</body>
+</html>

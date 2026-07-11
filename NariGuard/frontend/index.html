@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NariGuard Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: 'class' }
+    </script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <style>
+        :root {
+            --primary-start: #9333ea; /* purple-600 */
+            --primary-end: #ec4899;   /* pink-500 */
+            --primary-text: #9333ea;
+            --primary-bg: #f3e8ff;    /* purple-100 */
+            --primary-border: #e9d5ff; /* purple-200 */
+        }
+        .theme-blue {
+            --primary-start: #2563eb;
+            --primary-end: #06b6d4;
+            --primary-text: #2563eb;
+            --primary-bg: #dbeafe;
+            --primary-border: #bfdbfe;
+        }
+        .theme-green {
+            --primary-start: #16a34a;
+            --primary-end: #84cc16;
+            --primary-text: #16a34a;
+            --primary-bg: #dcfce7;
+            --primary-border: #bbf7d0;
+        }
+        
+        .grad-bg-text { background-image: linear-gradient(to right, var(--primary-start), var(--primary-end)); }
+        .grad-btn { background-image: linear-gradient(to right, var(--primary-start), var(--primary-end)); }
+        .text-primary { color: var(--primary-text); }
+        .bg-primary-light { background-color: var(--primary-bg); }
+        .border-primary-light { border-color: var(--primary-border); }
+        .hover-text-primary:hover { color: var(--primary-text); }
+        .hover-bg-primary-light:hover { background-color: var(--primary-bg); }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; transition: background-color 0.3s, color 0.3s; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); }
+        .dark .glass { background: rgba(31, 41, 55, 0.7); border: 1px solid rgba(255,255,255,0.05); }
+        .sos-btn { background: linear-gradient(135deg, #ff416c, #ff4b2b); box-shadow: 0 10px 30px rgba(255, 65, 108, 0.4); }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 dark:text-gray-200 bg-gradient-to-br from-gray-50 to-gray-200 dark:from-gray-900 dark:to-gray-900 theme-purple">
+
+    
+    <nav class="glass sticky top-0 z-50 shadow-sm transition-colors duration-300 dark:bg-gray-900/80 dark:border-b dark:border-gray-800">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+            <div class="text-2xl font-black bg-clip-text text-transparent grad-bg-text">NariGuard</div>
+            <div class="flex flex-wrap gap-4 items-center">
+                <a href="index.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Home</a>
+                <a href="safe-routes.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Routes</a>
+                <a href="career.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">AI Career</a>
+                <a href="mentors.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Mentors</a>
+                <a href="resources.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Resources</a>
+                <a href="jobs.html" class="font-semibold text-gray-700 dark:text-gray-300 hover-text-primary transition">Jobs</a>
+                
+                <!-- Color Cycle Button -->
+                <button id="color-cycle-btn" class="p-2 rounded-full bg-primary-light text-primary hover:scale-110 transition shadow-sm" title="Change Color Theme">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
+                </button>
+
+                <!-- Dark/Light Toggle Button -->
+                <button id="theme-toggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white transition">
+                    <svg id="theme-icon-light" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                    <svg id="theme-icon-dark" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                </button>
+                <a href="admin.html" class="px-4 py-2 rounded-full border border-primary-light text-primary hover-bg-primary-light font-semibold transition">Admin</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 py-12">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Column: SOS -->
+            <div class="lg:col-span-1 flex flex-col items-center justify-center glass p-10 rounded-3xl text-center h-full transform transition hover:-translate-y-1 hover:shadow-2xl">
+                <h2 class="text-3xl font-black mb-4 dark:text-white">Emergency</h2>
+                <p class="text-gray-500 dark:text-gray-400 mb-12">Press instantly to alert authorities & contacts</p>
+                <button id="sos-btn" class="sos-btn w-56 h-56 rounded-full text-white font-black text-5xl transition transform hover:scale-105 active:scale-95 animate-pulse shadow-2xl">
+                    SOS
+                </button>
+                <p id="sos-status" class="hidden mt-8 text-red-500 font-bold text-xl animate-bounce">Alert Sent! Siren Active!</p>
+                <div class="mt-8 w-full">
+                    <label class="block text-sm font-bold text-gray-500 dark:text-gray-400 mb-2">My Emergency Contact No.</label>
+                    <input type="text" id="emergency-contact-input" placeholder="+91 9876543210" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:border-primary-light text-center font-bold text-lg tracking-wider shadow-inner transition">
+                </div>
+            </div>
+            
+            <!-- Right Column: Map & AI -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- Map -->
+                <div class="glass p-6 rounded-3xl">
+                    <h3 class="text-xl font-bold mb-4 flex justify-between items-center dark:text-white">
+                        <span>Safe Routes & Nearby Spots</span>
+                        <div class="flex gap-2">
+                            <button id="plan-route-btn" class="text-xs grad-btn text-white px-3 py-2 rounded-full font-bold shadow hover:opacity-90 transition">Plan Route</button>
+                            <button id="find-nearby-btn" class="text-xs bg-primary-light text-primary px-3 py-2 rounded-full font-bold shadow hover:opacity-80 transition">Find Police</button>
+                        </div>
+                    </h3>
+                    <div id="map" class="w-full h-72 rounded-2xl border-4 border-gray-200 dark:border-gray-700 shadow-inner z-0"></div>
+                </div>
+                
+                <!-- AI Assistant -->
+                <div class="glass p-6 rounded-3xl">
+                    <h3 class="text-xl font-bold mb-4 dark:text-white text-primary">AI Safety & Legal Guide</h3>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="ai-prompt" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:border-primary-light" placeholder="Ask about self-defense, rights, or career...">
+                        <button id="ask-ai-btn" class="grad-btn text-white px-6 py-3 rounded-xl font-bold hover:opacity-90 transition shadow">Ask AI</button>
+                    </div>
+                    <div id="ai-response" class="hidden p-4 bg-gray-50 dark:bg-gray-800 rounded-xl text-gray-700 dark:text-gray-300 h-32 overflow-y-auto text-sm border border-gray-200 dark:border-gray-700 shadow-inner"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+    <script src="./main.js"></script>
+</body>
+</html>
