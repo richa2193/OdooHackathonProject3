@@ -1,6 +1,6 @@
 import os
 
-base_dir = r"f:\NariGuard\frontend"
+base_dir = os.path.dirname(os.path.abspath(__file__))
 
 nav_template = """
     <nav class="glass sticky top-0 z-50 shadow-sm transition-colors duration-300 dark:bg-gray-900/80 dark:border-b dark:border-gray-800">
@@ -79,6 +79,28 @@ html_head = """<!DOCTYPE html>
         .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3); }
         .dark .glass { background: rgba(31, 41, 55, 0.7); border: 1px solid rgba(255,255,255,0.05); }
         .sos-btn { background: linear-gradient(135deg, #ff416c, #ff4b2b); box-shadow: 0 10px 30px rgba(255, 65, 108, 0.4); }
+
+        /* Leaflet + Tailwind CSS Reset Fix */
+        .leaflet-container img {
+            max-width: none !important;
+            max-height: none !important;
+        }
+        .leaflet-marker-icon,
+        .leaflet-marker-shadow,
+        .leaflet-image-layer,
+        .leaflet-pane canvas,
+        .leaflet-tile-container img {
+            max-width: none !important;
+            max-height: none !important;
+        }
+        .leaflet-marker-shadow {
+            display: none !important;
+        }
+        /* Suppress broken default marker alt text */
+        .leaflet-marker-icon[alt="Mark"],
+        img[alt="Mark"] {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="min-h-screen text-gray-800 dark:text-gray-200 bg-gradient-to-br from-gray-50 to-gray-200 dark:from-gray-900 dark:to-gray-900 theme-purple">
@@ -87,7 +109,7 @@ html_head = """<!DOCTYPE html>
 footer = """
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
-    <script src="./main.js"></script>
+    <script src="./main.js?v=20260817"></script>
 </body>
 </html>
 """

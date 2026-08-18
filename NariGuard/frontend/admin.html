@@ -11,6 +11,23 @@
     <style>
         body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
         .glass-dark { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); }
+
+        /* Leaflet + Tailwind CSS Reset Fix */
+        .leaflet-container img {
+            max-width: none !important;
+            max-height: none !important;
+        }
+        .leaflet-marker-icon,
+        .leaflet-marker-shadow,
+        .leaflet-image-layer,
+        .leaflet-pane canvas,
+        .leaflet-tile-container img {
+            max-width: none !important;
+            max-height: none !important;
+        }
+        .leaflet-marker-shadow {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="flex flex-col md:flex-row h-screen overflow-hidden">
@@ -166,6 +183,51 @@
         let adminMap = null;
         let adminMarkers = L.layerGroup();
         let mapCentered = false;
+        let refreshInterval = null;
+
+        function createSvgIcon(color = 'blue', type = 'pin') {
+          let innerSvg = '';
+          if (type === 'police') {
+            innerSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="16" height="16"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 6h2v2h-2V7zm0 4h2v6h-2v-6z"/></svg>`;
+          } else if (type === 'user') {
+            innerSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
+          } else {
+            innerSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="16" height="16"><circle cx="12" cy="12" r="6"/></svg>`;
+          }
+
+          const bgColors = {
+            blue: '#2563eb',
+            green: '#16a34a',
+            red: '#ef4444',
+            purple: '#9333ea'
+          };
+          const bg = bgColors[color] || '#2563eb';
+
+          return L.divIcon({
+            className: 'custom-vector-marker',
+            html: `
+              <div style="
+                background-color: ${bg};
+                width: 32px;
+                height: 32px;
+                border-radius: 50% 50% 50% 0;
+                transform: rotate(-45deg);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                border: 2px solid #ffffff;
+              ">
+                <div style="transform: rotate(45deg); display: flex; align-items: center; justify-content: center;">
+                  ${innerSvg}
+                </div>
+              </div>
+            `,
+            iconSize: [32, 32],
+            iconAnchor: [16, 32],
+            popupAnchor: [0, -32]
+          });
+        }
 
         function initAdminMap() {
             adminMap = L.map('admin-map').setView([20.5937, 78.9629], 5);
@@ -187,11 +249,44 @@
                 initAdminMap();
                 setTimeout(() => { if (adminMap) adminMap.invalidateSize(); }, 800);
                 fetchAdminData();
-                setInterval(fetchAdminData, 10000); // Changed from 3s to 10s to prevent server overload
+                refreshInterval = setInterval(fetchAdminData, 8000);
             } else {
                 document.getElementById('login-error').classList.remove('hidden');
             }
         }
+
+        window.sendDispatchMsg = async function(alertId) {
+            try {
+                const res = await apiFetch(`/api/sos-alerts/${alertId}/`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_message: 'Rescue team dispatched! Help is on the way.' })
+                });
+                if (res.ok) {
+                    alert('Rescue team dispatched to target location!');
+                    fetchAdminData();
+                } else {
+                    alert('Failed to update dispatch status.');
+                }
+            } catch(err) {
+                alert('Failed to connect to backend.');
+            }
+        };
+
+        const passInput = document.getElementById('admin-pass');
+        if (passInput) {
+            passInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleAdminLogin();
+            });
+        }
+
+        // Logout functionality
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            if (refreshInterval) clearInterval(refreshInterval);
+            document.getElementById('login-overlay').style.display = 'flex';
+            document.getElementById('admin-pass').value = '';
+            mapCentered = false;
+        });
         
         const policeCache = {};
         
@@ -207,7 +302,14 @@
             if (policeCache[alertId]) return;
             policeCache[alertId] = { loading: true };
             try {
-                const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: `[out:json];node["amenity"="police"](around:5000,${lat},${lng});out body 1;` });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 4000);
+                const res = await fetch('https://overpass-api.de/api/interpreter', { 
+                    method: 'POST', 
+                    body: `[out:json];node["amenity"="police"](around:5000,${lat},${lng});out body 1;`,
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
                 const data = await res.json();
                 if (data.elements && data.elements.length > 0) {
                     const p = data.elements[0];
@@ -215,10 +317,9 @@
                 } else {
                     throw new Error("No police found");
                 }
-                fetchAdminData();
+                renderSOSData(lastSOSData);
             } catch(e) { 
                 console.warn("Map API rate limited or no police found. Using Simulated Police Dispatch for Demo.");
-                // Create a simulated police station 1.5km away for the hackathon demo if the real API fails
                 const mockLat = lat + 0.012;
                 const mockLng = lng + 0.012;
                 policeCache[alertId] = { 
@@ -227,180 +328,194 @@
                     name: 'Central Police Dispatch (Simulated)', 
                     distance: getDistance(lat, lng, mockLat, mockLng) 
                 };
-                fetchAdminData();
+                renderSOSData(lastSOSData);
             }
         }
 
-        // Fetch Real Database Data
-        async function fetchAdminData() {
-            try {
-                const response = await fetch('http://localhost:2206/api/sos-alerts/');
-                const data = await response.json();
-                
-                // Update Stats Counters
-                document.getElementById('active-sos-count').innerText = data.filter(d => d.status === 'active').length;
-                document.getElementById('total-rescues-count').innerText = data.length;
-                
-                // Update Live Feed
-                const feedContainer = document.getElementById('live-feed-container');
-                feedContainer.innerHTML = '';
-                
-                [...data].reverse().slice(0, 10).forEach(alert => {
-                    const isResolved = alert.status === 'resolved';
-                    const bgClass = isResolved ? 'bg-white/5 border-white/10' : 'bg-red-500/10 border-red-500/20';
-                    const textClass = isResolved ? 'text-gray-300' : 'text-red-300';
-                    const dateStr = new Date(alert.triggered_at).toLocaleTimeString();
-                    
-                    let policeHtml = '';
-                    if (!isResolved) {
-                        if (!policeCache[alert.id]) {
-                            fetchPoliceForSOS(alert.lat, alert.lng, alert.id);
-                            policeHtml = `<p class="text-xs text-blue-400 mt-1 font-bold">🚔 Finding nearest police...</p>`;
-                        } else if (policeCache[alert.id].distance) {
-                            policeHtml = `<p class="text-xs text-blue-400 mt-1 font-bold">🚔 ${policeCache[alert.id].name} - ${policeCache[alert.id].distance} km away</p>`;
-                        }
-                    }
+        let lastSOSData = [];
 
-                    feedContainer.innerHTML += `
-                        <div class="p-4 border rounded-xl relative overflow-hidden group ${bgClass}">
-                            <div class="flex justify-between items-start relative z-10">
-                                <div>
-                                    <p class="text-sm font-bold ${textClass}">SOS ${isResolved ? 'Resolved' : 'Active'}</p>
-                                    <p class="text-xs text-gray-400 mt-1 font-mono">Lat: ${alert.lat.toFixed(4)}, Lng: ${alert.lng.toFixed(4)}</p>
-                                    ${alert.emergency_contact ? `<p class="text-xs text-pink-400 mt-1 font-bold">📞 Contact: <a href="tel:${alert.emergency_contact}" class="underline hover:text-pink-300">${alert.emergency_contact}</a></p>` : ''}
-                                    ${policeHtml}
-                                    <p class="text-xs ${isResolved ? 'text-gray-500' : 'text-red-400'} mt-1 font-semibold">${dateStr}</p>
-                                </div>
-                                ${!isResolved && !alert.admin_message ? `<button onclick="sendDispatchMsg(${alert.id})" class="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded-full font-bold transition">Send Rescue</button>` : ''}
-                                ${alert.admin_message ? `<span class="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded border border-green-500/30">Rescue Sent</span>` : ''}
+        function renderSOSData(data) {
+            // Update Stats Counters
+            document.getElementById('active-sos-count').innerText = data.filter(d => d.status === 'active').length;
+            document.getElementById('total-rescues-count').innerText = data.length;
+            
+            // Update Live Feed
+            const feedContainer = document.getElementById('live-feed-container');
+            feedContainer.innerHTML = '';
+            
+            if (data.length === 0) {
+                feedContainer.innerHTML = '<div class="text-center text-gray-500 py-10">No SOS alerts recorded yet.</div>';
+            }
+            
+            [...data].reverse().slice(0, 10).forEach(alert => {
+                const isResolved = alert.status === 'resolved';
+                const bgClass = isResolved ? 'bg-white/5 border-white/10' : 'bg-red-500/10 border-red-500/20';
+                const textClass = isResolved ? 'text-gray-300' : 'text-red-300';
+                const dateStr = new Date(alert.triggered_at).toLocaleTimeString();
+                
+                let policeHtml = '';
+                if (!isResolved) {
+                    if (!policeCache[alert.id]) {
+                        fetchPoliceForSOS(alert.lat, alert.lng, alert.id);
+                        policeHtml = `<p class="text-xs text-blue-400 mt-1 font-bold">🚔 Finding nearest police...</p>`;
+                    } else if (policeCache[alert.id].distance) {
+                        policeHtml = `<p class="text-xs text-blue-400 mt-1 font-bold">🚔 ${policeCache[alert.id].name} - ${policeCache[alert.id].distance} km away</p>`;
+                    }
+                }
+
+                feedContainer.innerHTML += `
+                    <div class="p-4 border rounded-xl relative overflow-hidden group ${bgClass}">
+                        <div class="flex justify-between items-start relative z-10">
+                            <div>
+                                <p class="text-sm font-bold ${textClass}">SOS ${isResolved ? 'Resolved' : 'Active'}</p>
+                                <p class="text-xs text-gray-400 mt-1 font-mono">Lat: ${alert.lat.toFixed(4)}, Lng: ${alert.lng.toFixed(4)}</p>
+                                ${alert.emergency_contact ? `<p class="text-xs text-pink-400 mt-1 font-bold">📞 Contact: <a href="tel:${alert.emergency_contact}" class="underline hover:text-pink-300">${alert.emergency_contact}</a></p>` : ''}
+                                ${policeHtml}
+                                <p class="text-xs ${isResolved ? 'text-gray-500' : 'text-red-400'} mt-1 font-semibold">${dateStr}</p>
                             </div>
+                            ${!isResolved && !alert.admin_message ? `<button onclick="sendDispatchMsg(${alert.id})" class="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded-full font-bold transition">Send Rescue</button>` : ''}
+                            ${alert.admin_message ? `<span class="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded border border-green-500/30">Rescue Sent</span>` : ''}
                         </div>
-                    `;
-                });
+                    </div>
+                `;
+            });
 
-                // Prepare Map Markers and Chart Data
-                const chartData = {};
-                adminMarkers.clearLayers();
-                let latestActiveLat = null;
-                let latestActiveLng = null;
+            // Prepare Map Markers and Chart Data
+            const chartData = {};
+            adminMarkers.clearLayers();
+            let latestActiveLat = null;
+            let latestActiveLng = null;
 
-                data.forEach(alert => {
-                    const d = new Date(alert.triggered_at).toLocaleDateString();
-                    chartData[d] = (chartData[d] || 0) + 1;
+            data.forEach(alert => {
+                const d = new Date(alert.triggered_at).toLocaleDateString();
+                chartData[d] = (chartData[d] || 0) + 1;
+                
+                if (alert.status === 'active') {
+                    latestActiveLat = alert.lat;
+                    latestActiveLng = alert.lng;
                     
-                    if (alert.status === 'active') {
-                        latestActiveLat = alert.lat;
-                        latestActiveLng = alert.lng;
-                        
-                        const icon = L.icon({
-                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                            iconSize: [25, 41], iconAnchor: [12, 41]
-                        });
-                        L.marker([alert.lat, alert.lng], {icon: icon})
-                         .addTo(adminMarkers)
-                         .bindPopup(`<b>ACTIVE SOS!</b><br>Time: ${new Date(alert.triggered_at).toLocaleTimeString()}`);
-                         
-                        // Draw Police Station and line if available
-                        if (policeCache[alert.id] && policeCache[alert.id].distance) {
-                            const p = policeCache[alert.id];
-                            const pIcon = L.icon({
-                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                                iconSize: [25, 41], iconAnchor: [12, 41]
-                            });
-                            L.marker([p.lat, p.lng], {icon: pIcon}).addTo(adminMarkers).bindPopup(`<b>${p.name}</b><br>Distance: ${p.distance} km`);
-                            L.polyline([[alert.lat, alert.lng], [p.lat, p.lng]], {color: 'blue', dashArray: '5, 5', weight: 3}).addTo(adminMarkers);
-                        }
+                    const icon = createSvgIcon('red', 'user');
+                    L.marker([alert.lat, alert.lng], {icon: icon})
+                      .addTo(adminMarkers)
+                      .bindPopup(`<b>ACTIVE SOS!</b><br>Time: ${new Date(alert.triggered_at).toLocaleTimeString()}`);
+                      
+                    // Draw Police Station and line if available
+                    if (policeCache[alert.id] && policeCache[alert.id].distance) {
+                        const p = policeCache[alert.id];
+                        const pIcon = createSvgIcon('blue', 'police');
+                        L.marker([p.lat, p.lng], {icon: pIcon}).addTo(adminMarkers).bindPopup(`<b>${p.name}</b><br>Distance: ${p.distance} km`);
+                        L.polyline([[alert.lat, alert.lng], [p.lat, p.lng]], {color: 'blue', dashArray: '5, 5', weight: 3}).addTo(adminMarkers);
                     }
-                });
-                
-                // Auto-center map on latest active SOS
-                if (latestActiveLat !== null && latestActiveLng !== null) {
-                    adminMap.setView([latestActiveLat, latestActiveLng], 15);
                 }
-                
-                // Fetch Users Data
-                const usersResponse = await fetch('http://localhost:2206/api/users/');
-                const usersData = await usersResponse.json();
-                
-                document.getElementById('registered-users-count').innerText = usersData.length;
-                
-                const tbody = document.getElementById('users-table-body');
-                tbody.innerHTML = '';
-                usersData.forEach(u => {
-                    tbody.innerHTML += `
-                        <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                            <td class="px-6 py-4 font-mono text-gray-500">#${u.id}</td>
-                            <td class="px-6 py-4 font-bold text-white">${u.username}</td>
-                            <td class="px-6 py-4 text-blue-300">${u.email || 'N/A'}</td>
-                            <td class="px-6 py-4"><span class="bg-purple-500/20 text-purple-300 px-2 py-1 rounded text-xs font-bold uppercase">${u.role}</span></td>
-                        </tr>
-                    `;
-                });
-                
-                // Fetch Ratings Data
-                const ratingsResponse = await fetch('http://localhost:2206/api/ratings/');
-                const ratingsData = await ratingsResponse.json();
-                
-                const rtbody = document.getElementById('ratings-table-body');
-                rtbody.innerHTML = '';
-                if(ratingsData.length === 0) {
-                    rtbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No feedback submitted yet.</td></tr>';
-                }
-                ratingsData.reverse().forEach(r => {
-                    const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
-                    rtbody.innerHTML += `
-                        <tr class="border-b border-white/5 hover:bg-white/5 transition">
-                            <td class="px-6 py-4 font-bold text-white">${r.service_name}</td>
-                            <td class="px-6 py-4 text-yellow-400 text-lg">${stars}</td>
-                            <td class="px-6 py-4 italic text-gray-400">"${r.feedback || 'No comment'}"</td>
-                            <td class="px-6 py-4 text-xs text-gray-500">${new Date(r.submitted_at).toLocaleString()}</td>
-                        </tr>
-                    `;
-                });
+            });
+            
+            // Auto-center map on latest active SOS
+            if (latestActiveLat !== null && latestActiveLng !== null && !mapCentered) {
+                adminMap.setView([latestActiveLat, latestActiveLng], 14);
+                mapCentered = true;
+            }
+            
+            // Render Chart
+            const labels = Object.keys(chartData);
+            const counts = Object.values(chartData);
 
-                // Auto-center map on new emergency
-                if (latestActiveLat && latestActiveLng && !mapCentered) {
-                    adminMap.setView([latestActiveLat, latestActiveLng], 14);
-                    mapCentered = true;
-                }
-                
-                const labels = Object.keys(chartData);
-                const counts = Object.values(chartData);
-
-                const ctx = document.getElementById('adminChart').getContext('2d');
-                if (adminChartInstance) {
-                    adminChartInstance.destroy();
-                }
-                adminChartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels.length ? labels : ['No Data'],
-                        datasets: [{
-                            label: 'SOS Alerts Triggered',
-                            data: counts.length ? counts : [0],
-                            borderColor: '#60a5fa',
-                            backgroundColor: 'rgba(96, 165, 250, 0.1)',
-                            fill: true,
-                            tension: 0.4,
-                            pointBackgroundColor: '#60a5fa',
-                            pointBorderColor: '#fff'
-                        }]
+            const ctx = document.getElementById('adminChart').getContext('2d');
+            if (adminChartInstance) {
+                adminChartInstance.destroy();
+            }
+            adminChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.length ? labels : ['No Data'],
+                    datasets: [{
+                        label: 'SOS Alerts Triggered',
+                        data: counts.length ? counts : [0],
+                        borderColor: '#60a5fa',
+                        backgroundColor: 'rgba(96, 165, 250, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#60a5fa',
+                        pointBorderColor: '#fff'
+                    }]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: { 
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', stepSize: 1 } },
+                        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
                     },
-                    options: { 
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { labels: { color: '#94a3b8' } } },
-                        scales: { 
-                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', stepSize: 1 } },
-                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-                        },
-                        animation: { duration: 0 } // Disable animation for live refresh
-                    }
-                });
+                    animation: { duration: 0 }
+                }
+            });
+        }
 
-            } catch (err) {
-                console.error("Failed to fetch backend data:", err);
+        function renderUsersData(usersData) {
+            document.getElementById('registered-users-count').innerText = usersData.length;
+            
+            const tbody = document.getElementById('users-table-body');
+            tbody.innerHTML = '';
+            if (usersData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No users registered yet.</td></tr>';
+                return;
+            }
+            usersData.forEach(u => {
+                tbody.innerHTML += `
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                        <td class="px-6 py-4 font-mono text-gray-500">#${u.id}</td>
+                        <td class="px-6 py-4 font-bold text-white">${u.username}</td>
+                        <td class="px-6 py-4 text-blue-300">${u.email || 'N/A'}</td>
+                        <td class="px-6 py-4"><span class="bg-purple-500/20 text-purple-300 px-2 py-1 rounded text-xs font-bold uppercase">${u.role}</span></td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderRatingsData(ratingsData) {
+            const rtbody = document.getElementById('ratings-table-body');
+            rtbody.innerHTML = '';
+            if (ratingsData.length === 0) {
+                rtbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-500">No feedback submitted yet.</td></tr>';
+                return;
+            }
+            [...ratingsData].reverse().forEach(r => {
+                const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+                rtbody.innerHTML += `
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                        <td class="px-6 py-4 font-bold text-white">${r.service_name}</td>
+                        <td class="px-6 py-4 text-yellow-400 text-lg">${stars}</td>
+                        <td class="px-6 py-4 italic text-gray-400">"${r.feedback || 'No comment'}"</td>
+                        <td class="px-6 py-4 text-xs text-gray-500">${new Date(r.submitted_at).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // Fetch all data in PARALLEL for maximum speed
+        async function fetchAdminData() {
+            const [sosResult, usersResult, ratingsResult] = await Promise.allSettled([
+                apiFetch('/api/sos-alerts/').then(r => r.json()),
+                apiFetch('/api/users/').then(r => r.json()),
+                apiFetch('/api/ratings/').then(r => r.json())
+            ]);
+
+            if (sosResult.status === 'fulfilled') {
+                lastSOSData = sosResult.value;
+                renderSOSData(lastSOSData);
+            } else {
+                console.error("Failed to fetch SOS alerts:", sosResult.reason);
+            }
+
+            if (usersResult.status === 'fulfilled') {
+                renderUsersData(usersResult.value);
+            } else {
+                console.error("Failed to fetch users:", usersResult.reason);
+            }
+
+            if (ratingsResult.status === 'fulfilled') {
+                renderRatingsData(ratingsResult.value);
+            } else {
+                console.error("Failed to fetch ratings:", ratingsResult.reason);
             }
         }
         
@@ -409,7 +524,7 @@
             if (!msg) return;
             
             try {
-                await fetch(`http://localhost:2206/api/sos-alerts/${alertId}/`, {
+                await apiFetch(`/api/sos-alerts/${alertId}/`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ admin_message: msg })

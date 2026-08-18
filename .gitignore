@@ -1,0 +1,14 @@
+# Python & Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+NariGuard/venv/
+*.sqlite3
+NariGuard/backend/db.sqlite3
+staticfiles/
+
+# Logs & Temporary files
+*.log
+.system_generated/
+.DS_Store
